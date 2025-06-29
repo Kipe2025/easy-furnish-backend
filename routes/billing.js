@@ -6,7 +6,8 @@ const path = require('path');
 const { authMiddleware } = require('./auth');
 require('dotenv').config();
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+// Initialize Stripe only if secret key is available
+const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
 const DB_PATH = path.join(__dirname, '../db.json');
 
 const MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
@@ -30,6 +31,10 @@ function writeDB(db) {
 
 // POST /billing/create-checkout-session
 router.post('/create-checkout-session', authMiddleware, async (req, res) => {
+  if (!stripe) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+  
   const { plan } = req.body; // 'monthly' or 'yearly'
   const db = readDB();
   const user = db.users.find(u => u.id === req.user.id);
@@ -63,6 +68,10 @@ router.post('/create-checkout-session', authMiddleware, async (req, res) => {
 
 // POST /billing/webhook
 router.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!stripe || !WEBHOOK_SECRET) {
+    return res.status(500).json({ error: 'Stripe webhook not configured' });
+  }
+  
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], WEBHOOK_SECRET);
@@ -93,6 +102,10 @@ router.post('/webhook', express.raw({ type: 'application/json' }), (req, res) =>
 
 // POST /billing/create-portal-session
 router.post('/create-portal-session', authMiddleware, async (req, res) => {
+  if (!stripe) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+  
   const db = readDB();
   const user = db.users.find(u => u.id === req.user.id);
   if (!user || !user.stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer' });
